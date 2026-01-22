@@ -384,6 +384,12 @@ async def get_current_matches():
     matches = await match_cache.get_matches()
     return {"status": "success", "data": matches, "count": len(matches), "cached": match_cache.is_valid()}
 
+@api_router.get("/matches/all")
+async def get_all_matches():
+    """Get all matches (from cache)"""
+    matches = await match_cache.get_matches()
+    return {"status": "success", "data": matches, "count": len(matches)}
+
 @api_router.get("/matches/{match_id}")
 async def get_match_details(match_id: str):
     """Get detailed match info"""
@@ -399,6 +405,22 @@ async def get_match_details(match_id: str):
     except Exception as e:
         logger.error(f"Match fetch error: {e}")
     raise HTTPException(status_code=404, detail="Match not found")
+
+@api_router.get("/series")
+async def get_series():
+    """Get series list"""
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as http_client:
+            response = await http_client.get(
+                f"{CRICKET_API_BASE}/series",
+                params={"apikey": CRICKET_API_KEY, "offset": 0}
+            )
+            data = response.json()
+            if data.get("status") == "success":
+                return {"status": "success", "data": data.get("data", []), "count": len(data.get("data", []))}
+    except Exception as e:
+        logger.error(f"Series fetch error: {e}")
+    return {"status": "success", "data": [], "count": 0}
 
 @api_router.get("/subscribers")
 async def get_subscribers():
