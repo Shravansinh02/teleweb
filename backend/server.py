@@ -74,8 +74,8 @@ class MatchCache:
             
             return self.data
 
-# Global cache instance - 30 second TTL
-match_cache = MatchCache(ttl_seconds=30)
+# Global cache instance - 45 second TTL (max ~1920 req/day)
+match_cache = MatchCache(ttl_seconds=45)
 
 # ============ Models ============
 class Subscriber(BaseModel):
