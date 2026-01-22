@@ -93,9 +93,9 @@ class KSPCricketAPITester:
         return success
 
     def test_current_matches(self):
-        """Test current matches endpoint"""
+        """Test current matches endpoint with caching"""
         success, response = self.run_test(
-            "Current Matches",
+            "Current Matches (with Cache Check)",
             "GET",
             "matches/current",
             200
@@ -105,7 +105,9 @@ class KSPCricketAPITester:
             if response.get('status') == 'success':
                 data = response.get('data', [])
                 count = response.get('count', 0)
+                cached = response.get('cached', False)
                 print(f"   ✓ Found {count} matches")
+                print(f"   ✓ Cache status: {'HIT' if cached else 'MISS'}")
                 
                 # Check if matches have required fields
                 if data and len(data) > 0:
@@ -116,6 +118,22 @@ class KSPCricketAPITester:
                         print(f"   ⚠️  Missing fields in match data: {missing_fields}")
                     else:
                         print("   ✓ Match data structure looks good")
+                
+                # Test cache by making another request immediately
+                print("   🔄 Testing cache with immediate second request...")
+                success2, response2 = self.run_test(
+                    "Current Matches (Cache Test)",
+                    "GET", 
+                    "matches/current",
+                    200
+                )
+                
+                if success2 and isinstance(response2, dict):
+                    cached2 = response2.get('cached', False)
+                    if cached2:
+                        print("   ✅ Cache working - second request served from cache")
+                    else:
+                        print("   ⚠️  Cache might not be working - second request not cached")
                 
                 return True
             else:
