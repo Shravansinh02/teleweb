@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
-import { Activity, RefreshCw, AlertCircle } from "lucide-react";
+import { Activity, RefreshCw, AlertCircle, Wifi, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ScoreCard from "@/components/ScoreCard";
 import ScoreCardSkeleton from "@/components/ScoreCardSkeleton";
@@ -10,20 +10,24 @@ import { motion } from "framer-motion";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
+const REFRESH_INTERVAL = 30000; // 30 seconds
 
 export default function HomePage() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
-  const fetchMatches = async (showToast = false) => {
+  const fetchMatches = useCallback(async (showToast = false) => {
     try {
       if (showToast) setRefreshing(true);
       const response = await axios.get(`${API}/matches/current`);
       if (response.data.status === "success") {
         setMatches(response.data.data || []);
         setError(null);
+        setLastUpdate(new Date());
         if (showToast) toast.success("Scores updated!");
       }
     } catch (err) {
@@ -34,28 +38,40 @@ export default function HomePage() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchMatches();
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => fetchMatches(), 30000);
-    return () => clearInterval(interval);
-  }, []);
+    
+    // Auto-refresh every 30 seconds if enabled
+    let interval;
+    if (autoRefresh) {
+      interval = setInterval(() => fetchMatches(), REFRESH_INTERVAL);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [fetchMatches, autoRefresh]);
 
   const handleRefresh = () => {
     fetchMatches(true);
+  };
+
+  const toggleAutoRefresh = () => {
+    setAutoRefresh(!autoRefresh);
+    toast.info(autoRefresh ? "Auto-refresh disabled" : "Auto-refresh enabled (30s)");
   };
 
   // Separate live and other matches
   const liveMatches = matches.filter(m => 
     m.status?.toLowerCase().includes("live") || 
     m.status?.toLowerCase().includes("innings") ||
-    (m.score && m.score.length > 0 && !m.status?.toLowerCase().includes("won"))
+    (m.score && m.score.length > 0 && 
+     !m.status?.toLowerCase().includes("won") &&
+     !m.status?.toLowerCase().includes("match not started"))
   );
-  const otherMatches = matches.filter(m => 
-    !liveMatches.includes(m)
-  );
+  const otherMatches = matches.filter(m => !liveMatches.includes(m));
 
   return (
     <div className="min-h-screen" data-testid="home-page">
@@ -77,20 +93,42 @@ export default function HomePage() {
               KSP <span className="text-cricket-blue">CRICKET</span>
             </h1>
             
-            <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
-              Real-time cricket scores with Telegram alerts. Never miss a boundary, wicket, or match update.
+            <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto mb-6">
+              Real-time cricket scores with Telegram alerts. Auto-refreshes every 30 seconds.
             </p>
 
-            <Button 
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="gap-2 bg-cricket-blue hover:bg-cricket-blue/90 btn-press"
-              size="lg"
-              data-testid="refresh-btn"
-            >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? 'Refreshing...' : 'Refresh Scores'}
-            </Button>
+            {/* Controls */}
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Button 
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="gap-2 bg-cricket-blue hover:bg-cricket-blue/90 btn-press"
+                size="lg"
+                data-testid="refresh-btn"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                {refreshing ? 'Refreshing...' : 'Refresh Now'}
+              </Button>
+              
+              <Button
+                onClick={toggleAutoRefresh}
+                variant="outline"
+                size="lg"
+                className={`gap-2 ${autoRefresh ? 'border-cricket-live text-cricket-live' : 'border-muted-foreground'}`}
+                data-testid="auto-refresh-btn"
+              >
+                {autoRefresh ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+                {autoRefresh ? 'Auto: ON' : 'Auto: OFF'}
+              </Button>
+            </div>
+
+            {/* Last Update Time */}
+            {lastUpdate && (
+              <p className="text-xs text-muted-foreground mt-4">
+                Last updated: {lastUpdate.toLocaleTimeString('en-IN')}
+                {autoRefresh && " • Auto-refresh: 30s"}
+              </p>
+            )}
           </motion.div>
         </div>
       </section>
@@ -98,7 +136,6 @@ export default function HomePage() {
       {/* Matches Section */}
       <section className="py-8 md:py-12 px-4 md:px-8">
         <div className="max-w-7xl mx-auto">
-          {/* Live Matches */}
           {loading ? (
             <div className="mb-8">
               <h2 className="font-score text-xl md:text-2xl font-bold text-white mb-6 flex items-center gap-3">
@@ -132,14 +169,19 @@ export default function HomePage() {
               {/* Live Matches */}
               {liveMatches.length > 0 && (
                 <div className="mb-10">
-                  <h2 className="font-score text-xl md:text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                    <div className="live-dot"></div>
-                    Live Matches
-                  </h2>
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="font-score text-xl md:text-2xl font-bold text-white flex items-center gap-3">
+                      <div className="live-dot"></div>
+                      Live Matches
+                      <span className="text-sm font-normal text-muted-foreground ml-2">
+                        ({liveMatches.length})
+                      </span>
+                    </h2>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {liveMatches.map((match, index) => (
                       <ScoreCard 
-                        key={match.id} 
+                        key={`${match.id}-${match.status}`}
                         match={match} 
                         index={index}
                         isHero={index === 0 && liveMatches.length === 1}
@@ -154,11 +196,14 @@ export default function HomePage() {
                 <div className="mb-10">
                   <h2 className="font-score text-xl md:text-2xl font-bold text-white mb-6">
                     Recent & Upcoming
+                    <span className="text-sm font-normal text-muted-foreground ml-2">
+                      ({otherMatches.length})
+                    </span>
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {otherMatches.slice(0, 9).map((match, index) => (
                       <ScoreCard 
-                        key={match.id} 
+                        key={`${match.id}-${match.status}`}
                         match={match} 
                         index={index + liveMatches.length}
                       />
