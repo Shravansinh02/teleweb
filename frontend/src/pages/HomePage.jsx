@@ -10,7 +10,7 @@ import { motion } from "framer-motion";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
-const REFRESH_INTERVAL = 30000; // 30 seconds
+const REFRESH_INTERVAL = 45000; // 45 seconds (matches backend cache)
 
 export default function HomePage() {
   const [matches, setMatches] = useState([]);
