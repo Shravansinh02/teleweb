@@ -46,7 +46,7 @@ export default function Footer() {
 
           {/* Copyright */}
           <p className="text-sm text-muted-foreground">
-            © 2025 KSP Cricket. All rights reserved.
+            © 2026 KSP Cricket. All rights reserved.
           </p>
         </div>
       </div>
