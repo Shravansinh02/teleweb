@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from datetime import datetime, timezone
 from cachetools import TTLCache
 
-# Load environment variables (local use only; Railway uses Variables)
+# Load env (local only)
 load_dotenv()
 
 # ------------------ CONFIG ------------------
@@ -16,7 +16,7 @@ CRICKET_API_KEY = os.environ.get("CRICKET_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 
 if not TELEGRAM_BOT_TOKEN:
-    raise RuntimeError("TELEGRAM_BOT_TOKEN missing")
+    print("WARNING: TELEGRAM_BOT_TOKEN missing")
 
 # ------------------ APP ------------------
 app = FastAPI()
@@ -33,10 +33,13 @@ if MONGO_URL:
         print("MongoDB connection failed:", e)
 
 # ------------------ CACHE ------------------
-score_cache = TTLCache(maxsize=100, ttl=60)  # 1 minute cache
+score_cache = TTLCache(maxsize=100, ttl=60)
 
 # ------------------ HELPERS ------------------
 def send_telegram_message(chat_id: int, text: str):
+    if not TELEGRAM_BOT_TOKEN:
+        return
+
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": chat_id,
@@ -65,12 +68,13 @@ def get_live_score():
         res = requests.get(url, params=params, timeout=10)
         data = res.json()
 
-        if "data" not in data or not data["data"]:
+        if not data.get("data"):
             return "No live matches right now."
 
         match = data["data"][0]
-        team1 = match.get("teamInfo", [{}])[0].get("shortname", "Team A")
-        team2 = match.get("teamInfo", [{}])[1].get("shortname", "Team B")
+        teams = match.get("teamInfo", [])
+        team1 = teams[0].get("shortname", "Team A") if len(teams) > 0 else "Team A"
+        team2 = teams[1].get("shortname", "Team B") if len(teams) > 1 else "Team B"
         status = match.get("status", "Status not available")
 
         score_text = f"🏏 <b>{team1} vs {team2}</b>\n{status}"
@@ -88,6 +92,16 @@ def root():
     return {
         "status": "ok",
         "time": datetime.now(timezone.utc)
+    }
+
+
+# ✅ THIS FIXES YOUR 404 ERROR
+@app.get("/api/matches/current")
+def current_match():
+    score = get_live_score()
+    return {
+        "status": "success",
+        "data": score
     }
 
 
@@ -113,9 +127,6 @@ async def telegram_webhook(request: Request):
         send_telegram_message(chat_id, score)
 
     else:
-        send_telegram_message(
-            chat_id,
-            "❓ Unknown command\nUse /score"
-        )
+        send_telegram_message(chat_id, "❓ Unknown command\nUse /score")
 
     return {"ok": True}
